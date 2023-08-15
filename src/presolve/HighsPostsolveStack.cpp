@@ -77,6 +77,7 @@ void HighsPostsolveStack::FreeColSubstitution::undo(
     const std::vector<Nonzero>& colValues, HighsSolution& solution,
     HighsBasis& basis) {
   double colCoef = 0;
+  bool rowExists = (row < solution.row_value.size());
   // compute primal values
   HighsCDouble rowValue = 0;
   for (const auto& rowVal : rowValues) {
@@ -88,7 +89,8 @@ void HighsPostsolveStack::FreeColSubstitution::undo(
 
   assert(colCoef != 0);
   // Row values aren't fully postsolved, so why do this?
-  solution.row_value[row] =
+  if (rowExists) 
+    solution.row_value[row] = 
       double(rowValue + colCoef * solution.col_value[col]);
   solution.col_value[col] = double((rhs - rowValue) / colCoef);
 
@@ -96,26 +98,30 @@ void HighsPostsolveStack::FreeColSubstitution::undo(
   if (!solution.dual_valid) return;
 
   // compute the row dual value such that reduced cost of basic column is 0
-  solution.row_dual[row] = 0;
+  if (rowExists)
+    solution.row_dual[row] = 0;
   HighsCDouble dualval = colCost;
   for (const auto& colVal : colValues)
     dualval -= colVal.value * solution.row_dual[colVal.index];
 
   solution.col_dual[col] = 0;
-  solution.row_dual[row] = double(dualval / colCoef);
+  if (rowExists)
+    solution.row_dual[row] = double(dualval / colCoef);
 
   // set basis status if necessary
   if (!basis.valid) return;
 
   basis.col_status[col] = HighsBasisStatus::kBasic;
-  if (rowType == RowType::kEq)
-    basis.row_status[row] = solution.row_dual[row] < 0
-                                ? HighsBasisStatus::kUpper
-                                : HighsBasisStatus::kLower;
-  else if (rowType == RowType::kGeq)
-    basis.row_status[row] = HighsBasisStatus::kLower;
-  else
-    basis.row_status[row] = HighsBasisStatus::kUpper;
+  if (rowExists) {
+      if (rowType == RowType::kEq)
+        basis.row_status[row] = solution.row_dual[row] < 0
+                                    ? HighsBasisStatus::kUpper
+                                    : HighsBasisStatus::kLower;
+      else if (rowType == RowType::kGeq)
+        basis.row_status[row] = HighsBasisStatus::kLower;
+      else
+        basis.row_status[row] = HighsBasisStatus::kUpper;
+  }
 }
 
 void HighsPostsolveStack::DoubletonEquation::undo(
